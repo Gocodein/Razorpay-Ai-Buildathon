@@ -1,0 +1,47 @@
+# Environment & Credentials
+.env
+.env.local
+.env.*.local
+.streamlit/secrets.toml
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+
+# Virtual Environments
+.venv/
+venv/
+env/
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+
+# Runtime Databases & Local Data
+data/*.db
+data/*.db-wal
+data/*.db-shm
+data/*.sqlite*
+data/catalog_db/
+data/uploads/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite3
+*.sqlite
+
+# Scratch & Temporary
+scratch/
+.gemini/
+
+# IDE & Editor
+.vscode/
+.idea/
+*.log
+*.tmp

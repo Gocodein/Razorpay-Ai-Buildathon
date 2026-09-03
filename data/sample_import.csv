@@ -1,0 +1,4 @@
+id,name,description,price_inr,category,stock,sku,tags
+DEMO_001,Green Tea Moisturiser 50ml,Lightweight hydrating moisturiser with green tea extract and niacinamide. Non-comedogenic formula suitable for oily and combination skin. Paraben-free.,329,Skincare,75,SKN-MOIST-001,moisturiser;green tea;oily skin;niacinamide
+DEMO_002,Argan Oil Hair Serum 100ml,Frizz-control hair serum with pure Moroccan argan oil. Heat protection up to 230°C. Adds shine without weighing hair down.,499,Hair & Body,90,HB-SRM-002,hair serum;argan oil;frizz control;heat protection
+DEMO_003,Turmeric Face Scrub 150g,Gentle exfoliating scrub with turmeric and walnut shell powder. Removes dead skin cells and brightens complexion. Use 2-3 times per week.,249,Skincare,0,SKN-SCRB-003,face scrub;turmeric;brightening;exfoliator
