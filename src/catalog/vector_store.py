@@ -68,10 +68,18 @@ def _get_collection() -> chromadb.Collection:
     return _CACHED_COLLECTION
 
 
+_CACHED_CLIENT: chromadb.PersistentClient | None = None
+_CACHED_COLLECTION: chromadb.Collection | None = None
+_CACHED_PRODUCTS: list[dict[str, Any]] | None = None
+_CACHED_COUNT: int | None = None
+
+
 def invalidate_cache() -> None:
-    """Invalidate collection cache after upserts."""
-    global _CACHED_COLLECTION
+    """Invalidate collection and product caches after upserts or inventory changes."""
+    global _CACHED_COLLECTION, _CACHED_PRODUCTS, _CACHED_COUNT
     _CACHED_COLLECTION = None
+    _CACHED_PRODUCTS = None
+    _CACHED_COUNT = None
 
 
 
@@ -214,18 +222,26 @@ def get_by_id(product_id: str) -> dict[str, Any] | None:
 
 
 def catalog_size() -> int:
-    """Return the number of products currently in the vector store."""
-    return _get_collection().count()
+    """Return the number of products currently in the vector store (cached in memory)."""
+    global _CACHED_COUNT
+    if _CACHED_COUNT is not None:
+        return _CACHED_COUNT
+    _CACHED_COUNT = _get_collection().count()
+    return _CACHED_COUNT
 
 
-def get_all_products(limit: int = 200) -> list[dict[str, Any]]:
-    """Retrieve all products from the persistent ChromaDB collection up to limit."""
+def get_all_products(limit: int = 500) -> list[dict[str, Any]]:
+    """Retrieve all products from the persistent ChromaDB collection up to limit (cached in memory)."""
+    global _CACHED_PRODUCTS
+    if _CACHED_PRODUCTS is not None:
+        return _CACHED_PRODUCTS[:limit]
+
     collection = _get_collection()
     count = collection.count()
     if count == 0:
         return []
     result = collection.get(
-        limit=limit,
+        limit=max(limit, 500),
         include=["metadatas", "documents"]
     )
     products = []
@@ -234,7 +250,8 @@ def get_all_products(limit: int = 200) -> list[dict[str, Any]]:
             p = _deserialise_meta(meta)
             p["id"] = pid
             products.append(p)
-    return products
+    _CACHED_PRODUCTS = products
+    return products[:limit]
 
 
 

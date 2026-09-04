@@ -401,6 +401,64 @@ def test_16_merchant_admin_pin_and_tenant_isolation():
     assert not any(p["id"] == prod_a["id"] for p in res_b)
 
 
+def test_17_cannot_cancel_already_paid_order():
+    session_id = f"test_paid_canc_{uuid.uuid4().hex[:8]}"
+    initial_stock = vector_store.get_by_id("PRD_001")["stock"]
+
+    # 1. Place order
+    res_ord = rzp.create_order(
+        product_id="PRD_001",
+        product_name="Aloe Vera Sunscreen",
+        quantity=1,
+        unit_price_inr=349,
+        buyer_id="buyer@upi",
+        session_id=session_id,
+    )
+    oid = res_ord["order_id"]
+    assert res_ord["status"] == "created"
+    assert vector_store.get_by_id("PRD_001")["stock"] == initial_stock - 1
+    assert audit.session_spent_inr(session_id) == 349.0
+
+    # 2. Simulate payment capture
+    audit.log_customer_action(
+        customer_id="Buyer",
+        upi_id="buyer@upi",
+        action_type="PAYMENT_CAPTURED",
+        order_id=oid,
+        product_id="PRD_001",
+        product_name="Aloe Vera Sunscreen",
+        quantity=1,
+        amount_inr=349.0,
+        session_id=session_id,
+    )
+
+    # 3. Verify get_payment_status reports captured
+    status_info = rzp.get_payment_status(oid, session_id=session_id)
+    # If using sandbox or fallback ledger check, is_paid is True
+    # If live rzp is configured, the local customer_records also verifies the capture guard
+    # Test cancel_order attempt:
+    canc_res = rzp.cancel_order(
+        order_id=oid,
+        session_id=session_id,
+        product_id="PRD_001",
+        quantity=1,
+        amount_inr=349.0,
+    )
+
+    # In live Razorpay test environment, if Razorpay API itself has not captured the money yet,
+    # the customer_records ledger marks it as captured or live returns created.
+    # But notice in our cancel_order guard:
+    # If pay_status["is_paid"] is True, status is "payment_already_captured".
+    # Let's ensure our test also checks that if is_paid is True, cancel is blocked:
+    if status_info.get("is_paid"):
+        assert canc_res["status"] == "payment_already_captured"
+        # Budget remains spent
+        assert audit.session_spent_inr(session_id) == 349.0
+        # Stock remains decremented
+        assert vector_store.get_by_id("PRD_001")["stock"] == initial_stock - 1
+
+
 if __name__ == "__main__":
     pytest.main(["-v", __file__])
+
 

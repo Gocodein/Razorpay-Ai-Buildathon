@@ -432,13 +432,30 @@ def get_payment_status(order_id: str, session_id: str = "") -> dict[str, Any]:
     """
     rzp = _get_client()
     if rzp is None:
+        # In offline/sandbox mock mode: check if payment was captured in customer_records
+        is_paid = False
+        try:
+            with audit._conn() as conn:
+                row = conn.execute(
+                    "SELECT 1 FROM customer_records WHERE order_id = ? AND action_type = 'PAYMENT_CAPTURED' LIMIT 1",
+                    (order_id,),
+                ).fetchone()
+                if row:
+                    is_paid = True
+        except Exception:
+            pass
+
         status_info = {
             "order_id": order_id,
-            "status": "paid",
-            "is_paid": True,
+            "status": "paid" if is_paid else "created",
+            "is_paid": is_paid,
             "amount_paid_inr": 0,
             "mode": "sandbox_simulated",
-            "message": "Demo mode — payment simulated as successful.",
+            "message": (
+                "Payment verified via Sandbox Settlement Rail."
+                if is_paid
+                else "Order created in Sandbox. Payment pending checkout verification."
+            ),
         }
     else:
         try:
@@ -449,9 +466,22 @@ def get_payment_status(order_id: str, session_id: str = "") -> dict[str, Any]:
             attempts = int(rzp_order.get("attempts", 0))
             is_paid = (raw_status == "paid" or (amount_paid > 0 and amount_due == 0))
 
+            # Cross-verify with local customer ledger if already captured locally
+            if not is_paid:
+                try:
+                    with audit._conn() as conn:
+                        row = conn.execute(
+                            "SELECT 1 FROM customer_records WHERE order_id = ? AND action_type = 'PAYMENT_CAPTURED' LIMIT 1",
+                            (order_id,),
+                        ).fetchone()
+                        if row:
+                            is_paid = True
+                except Exception:
+                    pass
+
             status_info = {
                 "order_id": order_id,
-                "status": raw_status,
+                "status": "paid" if is_paid else raw_status,
                 "is_paid": is_paid,
                 "amount_paid_inr": amount_paid,
                 "amount_due_inr": amount_due,
@@ -464,13 +494,30 @@ def get_payment_status(order_id: str, session_id: str = "") -> dict[str, Any]:
                 ),
             }
         except Exception as exc:
+            # Check local ledger as fallback
+            is_paid = False
+            try:
+                with audit._conn() as conn:
+                    row = conn.execute(
+                        "SELECT 1 FROM customer_records WHERE order_id = ? AND action_type = 'PAYMENT_CAPTURED' LIMIT 1",
+                        (order_id,),
+                    ).fetchone()
+                    if row:
+                        is_paid = True
+            except Exception:
+                pass
+
             status_info = {
                 "order_id": order_id,
-                "status": "paid",
-                "is_paid": True,
+                "status": "paid" if is_paid else "created",
+                "is_paid": is_paid,
                 "amount_paid_inr": 0,
                 "mode": "sandbox_simulated",
-                "message": "Payment verified via Sandbox Settlement Rail.",
+                "message": (
+                    "Payment verified via Sandbox Settlement Rail."
+                    if is_paid
+                    else f"Payment pending verification: {exc}"
+                ),
             }
 
     if session_id:
@@ -575,6 +622,31 @@ def cancel_order(
                 "product_id": "",
                 "amount_inr": 0.0,
                 "message": "No active uncancelled orders found in this session.",
+                "remaining_budget_inr": audit.remaining_budget_inr(session_id),
+            }
+
+    # 3.5. Anti-Tamper Integrity Guard:
+    # In real e-commerce & payment gateways, once payment has been captured,
+    # the order CANNOT be discarded as an unpaid cart. Doing so would desynchronize
+    # Razorpay gateway settlement ledgers and merchant inventory.
+    # Captured orders require a formal merchant refund workflow.
+    if order_id:
+        pay_status = get_payment_status(order_id, session_id=session_id)
+        if pay_status.get("is_paid"):
+            logger.warning(
+                "Blocked cancellation attempt on already-paid order '%s' (₹%s)",
+                order_id, amount_inr
+            )
+            return {
+                "status": "payment_already_captured",
+                "order_id": order_id,
+                "product_id": product_id,
+                "amount_inr": amount_inr,
+                "message": (
+                    f"Order '{order_id}' cannot be cancelled as an unpaid cart because "
+                    f"payment of ₹{amount_inr:.0f} has already been verified and captured via Razorpay. "
+                    "In production payment gateways, captured funds require a formal merchant refund request."
+                ),
                 "remaining_budget_inr": audit.remaining_budget_inr(session_id),
             }
 

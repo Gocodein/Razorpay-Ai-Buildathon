@@ -383,7 +383,16 @@ def _cancel_order(order_id="", reason="Buyer requested cancellation", session_id
         amount_inr=amount_inr,
         reason=reason,
     )
-    st.session_state.latest_order = None
+    if res.get("status") == "cancelled":
+        st.session_state.latest_order = None
+    elif res.get("status") == "payment_already_captured":
+        st.session_state.paid_success_info = {
+            "order_id": target_oid,
+            "payment_id": "Captured via Razorpay",
+            "product_name": latest.get("product_name", product_id),
+            "amount_inr": amount_inr,
+        }
+        st.session_state.latest_order = None
     return res
 
 
@@ -1160,18 +1169,43 @@ if st.session_state.latest_order:
                     amount_inr=amount_inr,
                     reason="Buyer cancelled via checkout terminal",
                 )
-                st.session_state.latest_order = None
-                refunded = cancel_res.get("amount_inr", amount_inr)
-                st.session_state.messages.append({
-                    "role": "assistant",
-                    "content": f"❌ **Order `{order_id}` has been cancelled.** ₹{refunded:.0f} was refunded to your session budget.",
-                })
-                if "contents" in st.session_state and isinstance(st.session_state.contents, list):
-                    st.session_state.contents.append({
-                        "role": "model",
-                        "parts": [{"text": f"Order {order_id} was successfully cancelled by the user and ₹{refunded:.0f} has been refunded to their budget."}]
+                if cancel_res.get("status") == "payment_already_captured":
+                    st.warning("⚠️ Payment has already been captured on Razorpay! The order cannot be cancelled as an unpaid cart.")
+                    st.session_state.paid_success_info = {
+                        "order_id": order_id,
+                        "payment_id": "Captured via Razorpay",
+                        "product_name": product_name,
+                        "amount_inr": amount_inr,
+                    }
+                    st.session_state.latest_order = None
+                    st.session_state.messages.append({
+                        "role": "assistant",
+                        "content": (
+                            f"⚠️ **Order `{order_id}` Payment Already Captured**\n\n"
+                            f"Payment of ₹{amount_inr:.0f} has already been verified and settled via Razorpay. "
+                            "In production payment gateways, captured transactions cannot be cancelled as unpaid carts. "
+                            "If you wish to return the item or request a refund, please initiate a formal merchant refund request."
+                        ),
                     })
-                st.rerun()
+                    if "contents" in st.session_state and isinstance(st.session_state.contents, list):
+                        st.session_state.contents.append({
+                            "role": "model",
+                            "parts": [{"text": f"Order {order_id} could not be cancelled because payment was already captured on Razorpay. Redirecting to payment confirmation receipt."}]
+                        })
+                    st.rerun()
+                else:
+                    st.session_state.latest_order = None
+                    refunded = cancel_res.get("amount_inr", amount_inr)
+                    st.session_state.messages.append({
+                        "role": "assistant",
+                        "content": f"❌ **Order `{order_id}` has been cancelled.** ₹{refunded:.0f} was refunded to your session budget.",
+                    })
+                    if "contents" in st.session_state and isinstance(st.session_state.contents, list):
+                        st.session_state.contents.append({
+                            "role": "model",
+                            "parts": [{"text": f"Order {order_id} was successfully cancelled by the user and ₹{refunded:.0f} has been refunded to their budget."}]
+                        })
+                    st.rerun()
 
     with term_right:
         checkout_html = f"""
