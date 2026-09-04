@@ -1732,92 +1732,95 @@ with tab_onboard:
         st.markdown("""
         <div style="background: rgba(7, 30, 71, 0.65); border: 1.5px solid rgba(82, 143, 240, 0.45); border-radius: 14px; padding: 26px; margin: 16px 0 24px 0; box-shadow: 0 8px 32px rgba(0,0,0,0.35);">
             <div style="font-size:1.35em; font-weight:800; color:#528FF0; display:flex; align-items:center; gap:10px;">
-                🔒 Merchant Admin Authentication Required
+                🔒 Merchant Admin Authentication & Store Login
             </div>
             <p style="color:#cbd5e1; font-size:0.92em; margin-top:8px; line-height:1.5;">
-                To protect store inventory, vector database embeddings, and merchant API credentials from customer tampering, 
-                please enter your Merchant Admin PIN to unlock the control hub.
+                Select your store identity and enter your Merchant Admin PIN to access the catalog ingestion pipeline, 
+                vector embeddings, and payment gateway credentials.
             </p>
         </div>
         """, unsafe_allow_html=True)
 
-        pin_col1, pin_col2 = st.columns([2, 1])
-        with pin_col1:
-            entered_pin = st.text_input("Enter Merchant Admin PIN", type="password", placeholder="Enter PIN (Default: merchant123)", key="merchant_pin_input")
-            act_col1, act_col2 = st.columns(2)
-            with act_col1:
-                if st.button("🔓 Unlock Merchant Hub", key="btn_unlock_merchant", use_container_width=True):
-                    if entered_pin.strip() in ("merchant123", "admin", "1234", "rzp2026"):
-                        st.session_state.merchant_authenticated = True
-                        st.success("✅ Merchant Authenticated Successfully!")
-                        st.rerun()
-                    else:
-                        st.error("❌ Invalid PIN. Please enter 'merchant123' or use Quick Demo Unlock.")
-            with act_col2:
-                if st.button("⚡ Quick Unlock (Demo Mode)", key="btn_quick_unlock_demo", use_container_width=True):
-                    st.session_state.merchant_authenticated = True
-                    st.rerun()
-
-        with pin_col2:
-            st.info("""
-            **💡 Hackathon Demo Note:**
-            - **Default PIN**: `merchant123`
-            - Or click **[⚡ Quick Unlock]** for instant 1-click evaluator access.
-            - Keeps customer shopping (Tabs 1 & 2) 100% public while securing catalog admin tools.
-            """)
-    else:
-        # Authenticated Header & Multi-Merchant Workspace Switcher
-        auth_head1, auth_head2 = st.columns([3, 1])
-        with auth_head1:
-            st.markdown(f"""
-            <div style="background: rgba(0, 200, 150, 0.12); border: 1.5px solid rgba(0, 200, 150, 0.45); border-radius: 12px; padding: 14px 20px; margin-bottom: 18px;">
-                <span style="color:#00E599; font-weight:800; font-size:1.05em;">🟢 Authenticated Merchant Workspace:</span> 
-                <span style="color:#ffffff; font-weight:700; font-size:1.05em; margin-left:6px;">{st.session_state.active_merchant_name}</span> 
-                <code style="font-size:0.85em; color:#94a3b8; margin-left:8px;">(Tenant ID: {st.session_state.active_merchant_id})</code>
-            </div>
-            """, unsafe_allow_html=True)
-        with auth_head2:
-            if st.button("🔒 Lock / Sign Out", key="btn_merchant_signout", use_container_width=True):
-                st.session_state.merchant_authenticated = False
-                st.rerun()
-
-        # Multi-Tenant Store Workspace Selector
-        ws_col1, ws_col2 = st.columns([2, 2])
-        with ws_col1:
+        login_col1, login_col2 = st.columns([2, 1])
+        with login_col1:
             store_options = [
                 f"{settings.merchant_name} ({settings.merchant_id})",
                 "Himalayan Herbals (demo_merchant_002)",
                 "FreshDirect Organics (demo_merchant_003)",
             ]
-            default_idx = 0
-            for idx, opt in enumerate(store_options):
-                if st.session_state.active_merchant_id in opt:
-                    default_idx = idx
-                    break
-
-            selected_store = st.selectbox(
-                "🏢 Select Active Merchant Tenant",
+            selected_store_login = st.selectbox(
+                "🏢 Select Merchant Store to Access",
                 store_options,
-                index=default_idx,
-                key="store_tenant_selector",
-                help="Switch merchant tenant workspace to scope catalog imports and inventory"
+                index=0,
+                key="login_store_select",
+                help="Choose which merchant store you are administering"
             )
-            if selected_store:
-                if "demo_merchant_002" in selected_store:
-                    st.session_state.active_merchant_id = "demo_merchant_002"
-                    st.session_state.active_merchant_name = "Himalayan Herbals"
-                elif "demo_merchant_003" in selected_store:
-                    st.session_state.active_merchant_id = "demo_merchant_003"
-                    st.session_state.active_merchant_name = "FreshDirect Organics"
-                else:
-                    st.session_state.active_merchant_id = settings.merchant_id
-                    st.session_state.active_merchant_name = settings.merchant_name
 
-        with ws_col2:
-            st.caption("🛡️ **Tenant Isolation Rails:**")
-            st.markdown(f"Every imported product will be tagged with `merchant_id: {st.session_state.active_merchant_id}` for vector search partitioning.")
+            entered_pin = st.text_input(
+                "Merchant Admin PIN",
+                type="password",
+                placeholder="Enter PIN (Default: merchant123)",
+                key="merchant_pin_input"
+            )
 
-        st.markdown("<div style='margin-bottom: 16px;'></div>", unsafe_allow_html=True)
+            act_col1, act_col2 = st.columns(2)
+            with act_col1:
+                if st.button("🔓 Sign In to Merchant Hub", key="btn_unlock_merchant", use_container_width=True):
+                    if entered_pin.strip() in ("merchant123", "admin", "1234", "rzp2026"):
+                        if "demo_merchant_002" in selected_store_login:
+                            st.session_state.active_merchant_id = "demo_merchant_002"
+                            st.session_state.active_merchant_name = "Himalayan Herbals"
+                        elif "demo_merchant_003" in selected_store_login:
+                            st.session_state.active_merchant_id = "demo_merchant_003"
+                            st.session_state.active_merchant_name = "FreshDirect Organics"
+                        else:
+                            st.session_state.active_merchant_id = settings.merchant_id
+                            st.session_state.active_merchant_name = settings.merchant_name
+
+                        st.session_state.merchant_authenticated = True
+                        st.success(f"✅ Signed in as {st.session_state.active_merchant_name}!")
+                        st.rerun()
+                    else:
+                        st.error("❌ Invalid PIN. Please enter 'merchant123' or use 1-Click Quick Demo Access.")
+
+            with act_col2:
+                if st.button("⚡ 1-Click Quick Demo Access", key="btn_quick_unlock_demo", use_container_width=True):
+                    if "demo_merchant_002" in selected_store_login:
+                        st.session_state.active_merchant_id = "demo_merchant_002"
+                        st.session_state.active_merchant_name = "Himalayan Herbals"
+                    elif "demo_merchant_003" in selected_store_login:
+                        st.session_state.active_merchant_id = "demo_merchant_003"
+                        st.session_state.active_merchant_name = "FreshDirect Organics"
+                    else:
+                        st.session_state.active_merchant_id = settings.merchant_id
+                        st.session_state.active_merchant_name = settings.merchant_name
+
+                    st.session_state.merchant_authenticated = True
+                    st.rerun()
+
+        with login_col2:
+            st.info("""
+            **💡 Hackathon Evaluation Guide:**
+            - **Selected Store**: Log in directly as that merchant.
+            - **Default PIN**: `merchant123`
+            - **Evaluator Shortcut**: Click **[⚡ 1-Click Quick Demo Access]** for instant evaluation.
+            - **Isolation**: Customer shopping (Tabs 1 & 2) remains 100% public, while catalog ingestion is scoped to your selected store.
+            """)
+    else:
+        # Authenticated Header
+        auth_head1, auth_head2 = st.columns([3, 1])
+        with auth_head1:
+            st.markdown(f"""
+            <div style="background: rgba(0, 200, 150, 0.12); border: 1.5px solid rgba(0, 200, 150, 0.45); border-radius: 12px; padding: 14px 20px; margin-bottom: 18px;">
+                <span style="color:#00E599; font-weight:800; font-size:1.05em;">🟢 Authenticated Merchant:</span> 
+                <span style="color:#ffffff; font-weight:700; font-size:1.05em; margin-left:6px;">{st.session_state.active_merchant_name}</span> 
+                <code style="font-size:0.85em; color:#94a3b8; margin-left:8px;">(Tenant ID: {st.session_state.active_merchant_id})</code>
+            </div>
+            """, unsafe_allow_html=True)
+        with auth_head2:
+            if st.button("🔒 Switch Store / Sign Out", key="btn_merchant_signout", use_container_width=True):
+                st.session_state.merchant_authenticated = False
+                st.rerun()
 
         # 1. Live Catalog KPI Metrics
         cat_kpi1, cat_kpi2, cat_kpi3 = st.columns(3)
@@ -1841,195 +1844,195 @@ with tab_onboard:
             "🔑 Gateway API Credentials & Live Diagnostics",
         ])
 
-    # ── TAB 4.1: Custom File Upload ──────────────────────────────────────────
-    with ingest_tab1:
-        st.markdown("#### 📤 Upload Your Merchant Catalog File")
-        st.caption("Upload your product catalog in CSV or JSON format. Schema headers will be auto-detected automatically.")
+        # ── TAB 4.1: Custom File Upload ──────────────────────────────────────
+        with ingest_tab1:
+            st.markdown("#### 📤 Upload Your Merchant Catalog File")
+            st.caption(f"Upload your product catalog in CSV or JSON format. SKUs will be automatically associated with **{st.session_state.active_merchant_name}**.")
 
-        uploaded_file = st.file_uploader(
-            "Choose a CSV or JSON file",
-            type=["csv", "json", "jsonl"],
-            key="custom_catalog_uploader",
-        )
+            uploaded_file = st.file_uploader(
+                "Choose a CSV or JSON file",
+                type=["csv", "json", "jsonl"],
+                key="custom_catalog_uploader",
+            )
 
-        if uploaded_file is not None:
-            upload_dir = Path("data") / "uploads"
-            upload_dir.mkdir(parents=True, exist_ok=True)
-            saved_path = upload_dir / uploaded_file.name
+            if uploaded_file is not None:
+                upload_dir = Path("data") / "uploads"
+                upload_dir.mkdir(parents=True, exist_ok=True)
+                saved_path = upload_dir / uploaded_file.name
 
-            with open(saved_path, "wb") as f:
-                f.write(uploaded_file.getbuffer())
+                with open(saved_path, "wb") as f:
+                    f.write(uploaded_file.getbuffer())
 
-            st.success(f"✓ File uploaded: `{uploaded_file.name}` ({uploaded_file.size / 1024:.1f} KB)")
+                st.success(f"✓ File uploaded: `{uploaded_file.name}` ({uploaded_file.size / 1024:.1f} KB)")
 
-            # Quick Schema Preview
-            from src.catalog.importer import _load_csv, _load_json
-            try:
-                if uploaded_file.name.endswith(".csv"):
-                    preview_items = _load_csv(saved_path, limit=5)
-                else:
-                    preview_items = _load_json(saved_path, limit=5)
+                # Quick Schema Preview
+                from src.catalog.importer import _load_csv, _load_json
+                try:
+                    if uploaded_file.name.endswith(".csv"):
+                        preview_items = _load_csv(saved_path, limit=5)
+                    else:
+                        preview_items = _load_json(saved_path, limit=5)
 
-                if preview_items:
-                    st.markdown("##### 🔍 Auto-Detected Schema Preview (First 5 Items):")
-                    preview_rows = []
-                    for item in preview_items:
-                        preview_rows.append({
-                            "Product Name": item.get("name"),
-                            "Price (₹)": f"₹{item.get('price_inr', 0)}",
-                            "Category": item.get("category"),
-                            "Stock": item.get("stock"),
-                            "ID / SKU": item.get("id"),
-                        })
-                    st.dataframe(preview_rows, hide_index=True, use_container_width=True)
+                    if preview_items:
+                        st.markdown("##### 🔍 Auto-Detected Schema Preview (First 5 Items):")
+                        preview_rows = []
+                        for item in preview_items:
+                            preview_rows.append({
+                                "Product Name": item.get("name"),
+                                "Price (₹)": f"₹{item.get('price_inr', 0)}",
+                                "Category": item.get("category"),
+                                "Stock": item.get("stock"),
+                                "ID / SKU": item.get("id"),
+                            })
+                        st.dataframe(preview_rows, hide_index=True, use_container_width=True)
 
-                custom_limit = st.slider("Import Limit", min_value=5, max_value=200, value=min(len(preview_items) * 10, 50), step=5, key="custom_limit_slider")
+                    custom_limit = st.slider("Import Limit", min_value=5, max_value=200, value=min(len(preview_items) * 10, 50), step=5, key="custom_limit_slider")
 
-                if st.button("⚡ Ingest & Enrich Uploaded Products", key="btn_ingest_uploaded"):
-                    with st.spinner("Parsing schema, enriching vernacular intent phrases & upserting to ChromaDB…"):
+                    if st.button("⚡ Ingest & Enrich Uploaded Products", key="btn_ingest_uploaded"):
+                        with st.spinner("Parsing schema, enriching vernacular intent phrases & upserting to ChromaDB…"):
+                            from src.catalog.importer import import_catalog_sync
+                            count = import_catalog_sync(
+                                saved_path,
+                                limit=custom_limit,
+                                verbose=False,
+                                merchant_id=st.session_state.active_merchant_id,
+                            )
+                            st.cache_data.clear()
+                            vs.invalidate_cache()
+                            st.success(f"🎉 Successfully enriched and indexed {count} products for '{st.session_state.active_merchant_name}'! Total Catalog Size: {vs.catalog_size()}")
+                            st.rerun()
+                except Exception as exc:
+                    st.error(f"Error parsing uploaded file: {exc}")
+
+        # ── TAB 4.2: Sample Datasets ─────────────────────────────────────────
+        with ingest_tab2:
+            onboard_c1, onboard_c2 = st.columns([2, 1])
+
+            with onboard_c1:
+                st.markdown("#### 📁 Select Pre-Configured FMCG Dataset")
+                sample_choice = st.selectbox(
+                    "Select Catalog Source",
+                    [
+                        "BigBasket Real FMCG Products (bigbasket_data/BigBasket_Products.csv)",
+                        "Curated 20 Organic Wellness Pack (data/bigbasket_sample.csv)",
+                    ],
+                    key="sample_choice_select"
+                )
+                sample_limit = st.slider("Product Import Limit", min_value=10, max_value=200, value=50, step=10, key="sample_limit_slider")
+
+                if st.button("⚡ Ingest & Index Sample Dataset", key="btn_ingest_sample"):
+                    with st.spinner("Parsing headers, generating intent phrases & upserting to ChromaDB…"):
                         from src.catalog.importer import import_catalog_sync
+                        target_file = (
+                            "../bigbasket_data/BigBasket_Products.csv"
+                            if "BigBasket Real" in sample_choice
+                            else "data/bigbasket_sample.csv"
+                        )
                         count = import_catalog_sync(
-                            saved_path,
-                            limit=custom_limit,
+                            target_file,
+                            limit=sample_limit,
                             verbose=False,
                             merchant_id=st.session_state.active_merchant_id,
                         )
                         st.cache_data.clear()
                         vs.invalidate_cache()
-                        st.success(f"🎉 Successfully enriched and indexed {count} products for '{st.session_state.active_merchant_name}'! Total Catalog Size: {vs.catalog_size()}")
+                        st.success(f"✓ Successfully indexed {count} products for '{st.session_state.active_merchant_name}'! Total Catalog Size: {vs.catalog_size()}")
                         st.rerun()
-            except Exception as exc:
-                st.error(f"Error parsing uploaded file: {exc}")
 
-    # ── TAB 4.2: Sample Datasets ─────────────────────────────────────────────
-    with ingest_tab2:
-        onboard_c1, onboard_c2 = st.columns([2, 1])
+            with onboard_c2:
+                st.markdown("#### ℹ️ Supported Platforms")
+                st.markdown("""
+                • **BigBasket**: `product`, `sale_price`, `category`, `description`
+                • **Flipkart**: `product_name`, `discount_price`, `brand`
+                • **Shopify**: `Title`, `Variant Price`, `Body HTML`
+                • **WooCommerce / Custom**: Auto-detected
+                """)
 
-        with onboard_c1:
-            st.markdown("#### 📁 Select Pre-Configured FMCG Dataset")
-            sample_choice = st.selectbox(
-                "Select Catalog Source",
-                [
-                    "BigBasket Real FMCG Products (bigbasket_data/BigBasket_Products.csv)",
-                    "Curated 20 Organic Wellness Pack (data/bigbasket_sample.csv)",
-                ],
-                key="sample_choice_select"
+        # ── TAB 4.3: Merchant Gateway API Credentials & Diagnostics ─────────
+        with ingest_tab3:
+            st.markdown("#### 🔑 Merchant API Gateway Credentials & Diagnostics")
+            st.caption(
+                "Securely configure Google Gemini and Razorpay credentials. "
+                "Keys are saved to the backend environment and dynamically reloaded in memory without server restarts."
             )
-            sample_limit = st.slider("Product Import Limit", min_value=10, max_value=200, value=50, step=10, key="sample_limit_slider")
 
-            if st.button("⚡ Ingest & Index Sample Dataset", key="btn_ingest_sample"):
-                with st.spinner("Parsing headers, generating intent phrases & upserting to ChromaDB…"):
-                    from src.catalog.importer import import_catalog_sync
-                    target_file = (
-                        "../bigbasket_data/BigBasket_Products.csv"
-                        if "BigBasket Real" in sample_choice
-                        else "data/bigbasket_sample.csv"
-                    )
-                    count = import_catalog_sync(
-                        target_file,
-                        limit=sample_limit,
-                        verbose=False,
-                        merchant_id=st.session_state.active_merchant_id,
-                    )
-                    st.cache_data.clear()
-                    vs.invalidate_cache()
-                    st.success(f"✓ Successfully indexed {count} products for '{st.session_state.active_merchant_name}'! Total Catalog Size: {vs.catalog_size()}")
+            cred_c1, cred_c2 = st.columns([2, 1])
+            with cred_c1:
+                new_gem_key = st.text_input(
+                    "Google Gemini API Key (Google AI Studio)",
+                    value=settings.gemini_api_key,
+                    type="password",
+                    key="admin_gem_key",
+                    help="Enter AIzaSy... key from aistudio.google.com",
+                )
+                new_rzp_id = st.text_input(
+                    "Razorpay Key ID",
+                    value=settings.razorpay_key_id,
+                    key="admin_rzp_id",
+                    help="e.g. rzp_test_...",
+                )
+                new_rzp_sec = st.text_input(
+                    "Razorpay Key Secret",
+                    value=settings.razorpay_key_secret,
+                    type="password",
+                    key="admin_rzp_sec",
+                    help="Your Razorpay test/live secret",
+                )
+
+                if st.button("⚡ Save & Test API Connections", key="btn_save_admin_keys", use_container_width=True):
+                    from src.config import save_env_key, reload_settings
+                    if new_gem_key.strip():
+                        save_env_key("GEMINI_API_KEY", new_gem_key.strip())
+                    if new_rzp_id.strip():
+                        save_env_key("RAZORPAY_KEY_ID", new_rzp_id.strip())
+                    if new_rzp_sec.strip():
+                        save_env_key("RAZORPAY_KEY_SECRET", new_rzp_sec.strip())
+
+                    reloaded = reload_settings()
+                    rzp_ok, rzp_msg = rzp.validate_razorpay_credentials(reloaded.razorpay_key_id, reloaded.razorpay_key_secret)
+
+                    gem_ok = False
+                    gem_msg = ""
+                    if reloaded.gemini_api_key:
+                        try:
+                            headers = {"x-goog-api-key": reloaded.gemini_api_key}
+                            url = f"https://generativelanguage.googleapis.com/v1beta/models/{reloaded.gemini_model}:generateContent"
+                            with httpx.Client(timeout=6.0) as cl:
+                                r = cl.post(url, json={"contents": [{"parts": [{"text": "hi"}]}]}, headers=headers)
+                                if r.status_code == 200:
+                                    gem_ok = True
+                                    gem_msg = "Live Google AI / Gemini Connected (200 OK)"
+                                else:
+                                    gem_msg = f"HTTP {r.status_code}: {r.text[:80]}"
+                        except Exception as ex:
+                            gem_msg = str(ex)
+                    else:
+                        gem_msg = "No Gemini key configured"
+
+                    st.session_state.api_test_results = {
+                        "rzp_ok": rzp_ok,
+                        "rzp_msg": rzp_msg,
+                        "gem_ok": gem_ok,
+                        "gem_msg": gem_msg,
+                    }
                     st.rerun()
 
-        with onboard_c2:
-            st.markdown("#### ℹ️ Supported Platforms")
-            st.markdown("""
-            • **BigBasket**: `product`, `sale_price`, `category`, `description`
-            • **Flipkart**: `product_name`, `discount_price`, `brand`
-            • **Shopify**: `Title`, `Variant Price`, `Body HTML`
-            • **WooCommerce / Custom**: Auto-detected
-            """)
+                if "api_test_results" in st.session_state:
+                    res = st.session_state.api_test_results
+                    if res.get("rzp_ok"):
+                        st.success(f"✅ Razorpay Gateway: {res.get('rzp_msg')}")
+                    else:
+                        st.warning(f"⚠️ Razorpay Gateway: {res.get('rzp_msg')}")
 
-    # ── TAB 4.3: Merchant Gateway API Credentials & Diagnostics ─────────────
-    with ingest_tab3:
-        st.markdown("#### 🔑 Merchant API Gateway Credentials & Diagnostics")
-        st.caption(
-            "Securely configure Google Gemini and Razorpay credentials. "
-            "Keys are saved to the backend environment and dynamically reloaded in memory without server restarts."
-        )
+                    if res.get("gem_ok"):
+                        st.success(f"✅ Gemini AI Agent: {res.get('gem_msg')}")
+                    else:
+                        st.info(f"ℹ️ Gemini AI Agent: {res.get('gem_msg')} (Local Autonomous Engine active)")
 
-        cred_c1, cred_c2 = st.columns([2, 1])
-        with cred_c1:
-            new_gem_key = st.text_input(
-                "Google Gemini API Key (Google AI Studio)",
-                value=settings.gemini_api_key,
-                type="password",
-                key="admin_gem_key",
-                help="Enter AIzaSy... key from aistudio.google.com",
-            )
-            new_rzp_id = st.text_input(
-                "Razorpay Key ID",
-                value=settings.razorpay_key_id,
-                key="admin_rzp_id",
-                help="e.g. rzp_test_...",
-            )
-            new_rzp_sec = st.text_input(
-                "Razorpay Key Secret",
-                value=settings.razorpay_key_secret,
-                type="password",
-                key="admin_rzp_sec",
-                help="Your Razorpay test/live secret",
-            )
-
-            if st.button("⚡ Save & Test API Connections", key="btn_save_admin_keys", use_container_width=True):
-                from src.config import save_env_key, reload_settings
-                if new_gem_key.strip():
-                    save_env_key("GEMINI_API_KEY", new_gem_key.strip())
-                if new_rzp_id.strip():
-                    save_env_key("RAZORPAY_KEY_ID", new_rzp_id.strip())
-                if new_rzp_sec.strip():
-                    save_env_key("RAZORPAY_KEY_SECRET", new_rzp_sec.strip())
-
-                reloaded = reload_settings()
-                rzp_ok, rzp_msg = rzp.validate_razorpay_credentials(reloaded.razorpay_key_id, reloaded.razorpay_key_secret)
-
-                gem_ok = False
-                gem_msg = ""
-                if reloaded.gemini_api_key:
-                    try:
-                        headers = {"x-goog-api-key": reloaded.gemini_api_key}
-                        url = f"https://generativelanguage.googleapis.com/v1beta/models/{reloaded.gemini_model}:generateContent"
-                        with httpx.Client(timeout=6.0) as cl:
-                            r = cl.post(url, json={"contents": [{"parts": [{"text": "hi"}]}]}, headers=headers)
-                            if r.status_code == 200:
-                                gem_ok = True
-                                gem_msg = "Live Google AI / Gemini Connected (200 OK)"
-                            else:
-                                gem_msg = f"HTTP {r.status_code}: {r.text[:80]}"
-                    except Exception as ex:
-                        gem_msg = str(ex)
-                else:
-                    gem_msg = "No Gemini key configured"
-
-                st.session_state.api_test_results = {
-                    "rzp_ok": rzp_ok,
-                    "rzp_msg": rzp_msg,
-                    "gem_ok": gem_ok,
-                    "gem_msg": gem_msg,
-                }
-                st.rerun()
-
-            if "api_test_results" in st.session_state:
-                res = st.session_state.api_test_results
-                if res.get("rzp_ok"):
-                    st.success(f"✅ Razorpay Gateway: {res.get('rzp_msg')}")
-                else:
-                    st.warning(f"⚠️ Razorpay Gateway: {res.get('rzp_msg')}")
-
-                if res.get("gem_ok"):
-                    st.success(f"✅ Gemini AI Agent: {res.get('gem_msg')}")
-                else:
-                    st.info(f"ℹ️ Gemini AI Agent: {res.get('gem_msg')} (Local Autonomous Engine active)")
-
-        with cred_c2:
-            st.markdown("#### 🛡️ Security Guardrails")
-            st.markdown("""
-            • **Zero Client Exposure**: Key Secret is strictly kept server-side in Python backend memory and SQLite WAL.
-            • **Autofill Protection**: Credential inputs are isolated from buyer shopping sessions.
-            • **Multi-LLM Fallback**: If cloud keys are absent, the on-device Autonomous Local Agent Engine handles semantic search, inventory locks, and checkout generation seamlessly.
-            """)
+            with cred_c2:
+                st.markdown("#### 🛡️ Security Guardrails")
+                st.markdown("""
+                • **Zero Client Exposure**: Key Secret is strictly kept server-side in Python backend memory and SQLite WAL.
+                • **Autofill Protection**: Credential inputs are isolated from buyer shopping sessions.
+                • **Multi-LLM Fallback**: If cloud keys are absent, the on-device Autonomous Local Agent Engine handles semantic search, inventory locks, and checkout generation seamlessly.
+                """)
