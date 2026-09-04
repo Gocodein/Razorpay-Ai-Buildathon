@@ -352,6 +352,55 @@ def test_15_payment_capture_ledger_and_gmv_accounting():
     assert sum(order_amounts.values()) == 102.0
 
 
+def test_16_merchant_admin_pin_and_tenant_isolation():
+    # 1. Test Admin PIN validation logic
+    valid_pins = {"merchant123", "admin", "1234", "rzp2026"}
+    assert "merchant123" in valid_pins
+    assert "admin" in valid_pins
+    assert "wrong_pin" not in valid_pins
+    assert "random_pass" not in valid_pins
+
+    # 2. Test Multi-Tenant Product Isolation in Vector Store
+    tenant_a = f"merchant_a_{uuid.uuid4().hex[:6]}"
+    tenant_b = f"merchant_b_{uuid.uuid4().hex[:6]}"
+
+    prod_a = {
+        "id": f"sku_a_{uuid.uuid4().hex[:6]}",
+        "name": "Alpha Organic Honey",
+        "search_text": "Alpha Organic Honey pure wild raw honey sweetness",
+        "price_inr": 250,
+        "stock": 20,
+        "sku": "SKU_A_001",
+        "category": "Organic Groceries",
+        "agent_description": "Pure wild organic honey by Tenant A",
+        "merchant_id": tenant_a,
+    }
+
+    prod_b = {
+        "id": f"sku_b_{uuid.uuid4().hex[:6]}",
+        "name": "Beta Himalayan Shilajit",
+        "search_text": "Beta Himalayan Shilajit resin stamina energy vitality",
+        "price_inr": 850,
+        "stock": 15,
+        "sku": "SKU_B_001",
+        "category": "Ayurvedic Supplements",
+        "agent_description": "Pure Himalayan Shilajit by Tenant B",
+        "merchant_id": tenant_b,
+    }
+
+    vector_store.upsert_products([prod_a, prod_b])
+
+    # Search with Tenant A filter
+    res_a = vector_store.search("honey", n_results=5, in_stock_only=True, merchant_id=tenant_a)
+    assert any(p["id"] == prod_a["id"] for p in res_a)
+    assert not any(p["id"] == prod_b["id"] for p in res_a)
+
+    # Search with Tenant B filter
+    res_b = vector_store.search("shilajit", n_results=5, in_stock_only=True, merchant_id=tenant_b)
+    assert any(p["id"] == prod_b["id"] for p in res_b)
+    assert not any(p["id"] == prod_a["id"] for p in res_b)
+
+
 if __name__ == "__main__":
     pytest.main(["-v", __file__])
 

@@ -180,14 +180,15 @@ def _load_json(path: Path, limit: int | None = None) -> list[dict]:
     return products
 
 
-async def import_catalog(file_path: str, limit: int | None = None, verbose: bool = True) -> int:
+async def import_catalog(file_path: str, limit: int | None = None, verbose: bool = True, merchant_id: str | None = None) -> int:
     """
     Import, auto-enrich, and index a merchant's product catalog.
 
     Args:
-        file_path: Path to CSV or JSON file.
-        limit:     Max items to import (optional).
-        verbose:   Print summary table when done.
+        file_path:   Path to CSV or JSON file.
+        limit:       Max items to import (optional).
+        verbose:     Print summary table when done.
+        merchant_id: Optional tenant merchant identifier (e.g. 'demo_merchant_001').
 
     Returns:
         Number of products imported.
@@ -244,6 +245,10 @@ async def import_catalog(file_path: str, limit: int | None = None, verbose: bool
     console.print("[dim]⚡ Generating semantic intent phrases & Hinglish aliases…[/dim]")
     enriched = await enrich_catalog(raw)
 
+    if merchant_id:
+        for p in enriched:
+            p["merchant_id"] = str(merchant_id).strip()
+
     console.print(f"[dim]📦 Indexing {len(enriched)} embeddings into ChromaDB collection…[/dim]")
     upsert_products(enriched)
 
@@ -253,7 +258,7 @@ async def import_catalog(file_path: str, limit: int | None = None, verbose: bool
     return len(enriched)
 
 
-def import_catalog_sync(file_path: str | Path, limit: int | None = None, verbose: bool = False) -> int:
+def import_catalog_sync(file_path: str | Path, limit: int | None = None, verbose: bool = False, merchant_id: str | None = None) -> int:
     """
     Synchronously run catalog import without asyncio event loop conflicts.
     Guarantees reliable execution inside Streamlit, notebooks, and background threads.
@@ -261,7 +266,7 @@ def import_catalog_sync(file_path: str | Path, limit: int | None = None, verbose
     import concurrent.futures
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-        future = pool.submit(asyncio.run, import_catalog(str(file_path), limit=limit, verbose=verbose))
+        future = pool.submit(asyncio.run, import_catalog(str(file_path), limit=limit, verbose=verbose, merchant_id=merchant_id))
         return future.result()
 
 

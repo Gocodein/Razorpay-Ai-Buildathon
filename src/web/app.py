@@ -103,6 +103,15 @@ if "paid_success_info" not in st.session_state:
 if "pending_prompt" not in st.session_state:
     st.session_state.pending_prompt = None
 
+if "merchant_authenticated" not in st.session_state:
+    st.session_state.merchant_authenticated = False
+
+if "active_merchant_id" not in st.session_state:
+    st.session_state.active_merchant_id = settings.merchant_id
+
+if "active_merchant_name" not in st.session_state:
+    st.session_state.active_merchant_name = settings.merchant_name
+
 # ── Handle Payment Success Redirect / Query Params ───────────────────────────
 query_params = st.query_params
 if "paid_order" in query_params:
@@ -1712,34 +1721,125 @@ with tab_audit:
 # ─────────────────────────────────────────────────────────────────────────────
 
 with tab_onboard:
-    st.markdown("### 🚀 Universal Merchant Onboarding & AI Enrichment Pipeline")
+    st.markdown("### 🚀 Universal Merchant Onboarding & AI Control Hub")
     st.markdown(
         "Any merchant can onboard their CSV/JSON product catalog in seconds. "
         "Our pipeline auto-detects BigBasket, Flipkart, Shopify, WooCommerce, or Custom CSV headers, "
         "generates bilingual Indian vernacular intent phrases, and indexes embeddings into ChromaDB."
     )
 
-    # 1. Live Catalog KPI Metrics
-    cat_kpi1, cat_kpi2, cat_kpi3 = st.columns(3)
-    current_catalog = vs.get_all_products(limit=500)
-    total_skus = len(current_catalog)
-    in_stock_skus = sum(1 for p in current_catalog if int(p.get("stock", 0)) > 0)
-    distinct_cats = len(set(p.get("category", "General").split(" > ")[0].strip() for p in current_catalog if p.get("category")))
+    if not st.session_state.merchant_authenticated:
+        st.markdown("""
+        <div style="background: rgba(7, 30, 71, 0.65); border: 1.5px solid rgba(82, 143, 240, 0.45); border-radius: 14px; padding: 26px; margin: 16px 0 24px 0; box-shadow: 0 8px 32px rgba(0,0,0,0.35);">
+            <div style="font-size:1.35em; font-weight:800; color:#528FF0; display:flex; align-items:center; gap:10px;">
+                🔒 Merchant Admin Authentication Required
+            </div>
+            <p style="color:#cbd5e1; font-size:0.92em; margin-top:8px; line-height:1.5;">
+                To protect store inventory, vector database embeddings, and merchant API credentials from customer tampering, 
+                please enter your Merchant Admin PIN to unlock the control hub.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
 
-    with cat_kpi1:
-        st.markdown(f"<div class='glass-metric'><div class='metric-val' style='color:#528FF0;'>{total_skus}</div><div class='metric-lbl'>Total Indexed SKUs</div></div>", unsafe_allow_html=True)
-    with cat_kpi2:
-        st.markdown(f"<div class='glass-metric'><div class='metric-val' style='color:#00E599;'>{in_stock_skus}</div><div class='metric-lbl'>In-Stock SKUs</div></div>", unsafe_allow_html=True)
-    with cat_kpi3:
-        st.markdown(f"<div class='glass-metric'><div class='metric-val' style='color:#FFB800;'>{distinct_cats}</div><div class='metric-lbl'>Active Categories</div></div>", unsafe_allow_html=True)
+        pin_col1, pin_col2 = st.columns([2, 1])
+        with pin_col1:
+            entered_pin = st.text_input("Enter Merchant Admin PIN", type="password", placeholder="Enter PIN (Default: merchant123)", key="merchant_pin_input")
+            act_col1, act_col2 = st.columns(2)
+            with act_col1:
+                if st.button("🔓 Unlock Merchant Hub", key="btn_unlock_merchant", use_container_width=True):
+                    if entered_pin.strip() in ("merchant123", "admin", "1234", "rzp2026"):
+                        st.session_state.merchant_authenticated = True
+                        st.success("✅ Merchant Authenticated Successfully!")
+                        st.rerun()
+                    else:
+                        st.error("❌ Invalid PIN. Please enter 'merchant123' or use Quick Demo Unlock.")
+            with act_col2:
+                if st.button("⚡ Quick Unlock (Demo Mode)", key="btn_quick_unlock_demo", use_container_width=True):
+                    st.session_state.merchant_authenticated = True
+                    st.rerun()
 
-    st.markdown("<div style='margin-bottom: 18px;'></div>", unsafe_allow_html=True)
+        with pin_col2:
+            st.info("""
+            **💡 Hackathon Demo Note:**
+            - **Default PIN**: `merchant123`
+            - Or click **[⚡ Quick Unlock]** for instant 1-click evaluator access.
+            - Keeps customer shopping (Tabs 1 & 2) 100% public while securing catalog admin tools.
+            """)
+    else:
+        # Authenticated Header & Multi-Merchant Workspace Switcher
+        auth_head1, auth_head2 = st.columns([3, 1])
+        with auth_head1:
+            st.markdown(f"""
+            <div style="background: rgba(0, 200, 150, 0.12); border: 1.5px solid rgba(0, 200, 150, 0.45); border-radius: 12px; padding: 14px 20px; margin-bottom: 18px;">
+                <span style="color:#00E599; font-weight:800; font-size:1.05em;">🟢 Authenticated Merchant Workspace:</span> 
+                <span style="color:#ffffff; font-weight:700; font-size:1.05em; margin-left:6px;">{st.session_state.active_merchant_name}</span> 
+                <code style="font-size:0.85em; color:#94a3b8; margin-left:8px;">(Tenant ID: {st.session_state.active_merchant_id})</code>
+            </div>
+            """, unsafe_allow_html=True)
+        with auth_head2:
+            if st.button("🔒 Lock / Sign Out", key="btn_merchant_signout", use_container_width=True):
+                st.session_state.merchant_authenticated = False
+                st.rerun()
 
-    ingest_tab1, ingest_tab2, ingest_tab3 = st.tabs([
-        "📤 Upload Custom Catalog (CSV / JSON)",
-        "📦 Ingest from Sample Datasets",
-        "🔑 Gateway API Credentials & Live Diagnostics",
-    ])
+        # Multi-Tenant Store Workspace Selector
+        ws_col1, ws_col2 = st.columns([2, 2])
+        with ws_col1:
+            store_options = [
+                f"{settings.merchant_name} ({settings.merchant_id})",
+                "Himalayan Herbals (demo_merchant_002)",
+                "FreshDirect Organics (demo_merchant_003)",
+            ]
+            default_idx = 0
+            for idx, opt in enumerate(store_options):
+                if st.session_state.active_merchant_id in opt:
+                    default_idx = idx
+                    break
+
+            selected_store = st.selectbox(
+                "🏢 Select Active Merchant Tenant",
+                store_options,
+                index=default_idx,
+                key="store_tenant_selector",
+                help="Switch merchant tenant workspace to scope catalog imports and inventory"
+            )
+            if selected_store:
+                if "demo_merchant_002" in selected_store:
+                    st.session_state.active_merchant_id = "demo_merchant_002"
+                    st.session_state.active_merchant_name = "Himalayan Herbals"
+                elif "demo_merchant_003" in selected_store:
+                    st.session_state.active_merchant_id = "demo_merchant_003"
+                    st.session_state.active_merchant_name = "FreshDirect Organics"
+                else:
+                    st.session_state.active_merchant_id = settings.merchant_id
+                    st.session_state.active_merchant_name = settings.merchant_name
+
+        with ws_col2:
+            st.caption("🛡️ **Tenant Isolation Rails:**")
+            st.markdown(f"Every imported product will be tagged with `merchant_id: {st.session_state.active_merchant_id}` for vector search partitioning.")
+
+        st.markdown("<div style='margin-bottom: 16px;'></div>", unsafe_allow_html=True)
+
+        # 1. Live Catalog KPI Metrics
+        cat_kpi1, cat_kpi2, cat_kpi3 = st.columns(3)
+        current_catalog = vs.get_all_products(limit=500)
+        total_skus = len(current_catalog)
+        in_stock_skus = sum(1 for p in current_catalog if int(p.get("stock", 0)) > 0)
+        distinct_cats = len(set(p.get("category", "General").split(" > ")[0].strip() for p in current_catalog if p.get("category")))
+
+        with cat_kpi1:
+            st.markdown(f"<div class='glass-metric'><div class='metric-val' style='color:#528FF0;'>{total_skus}</div><div class='metric-lbl'>Total Indexed SKUs</div></div>", unsafe_allow_html=True)
+        with cat_kpi2:
+            st.markdown(f"<div class='glass-metric'><div class='metric-val' style='color:#00E599;'>{in_stock_skus}</div><div class='metric-lbl'>In-Stock SKUs</div></div>", unsafe_allow_html=True)
+        with cat_kpi3:
+            st.markdown(f"<div class='glass-metric'><div class='metric-val' style='color:#FFB800;'>{distinct_cats}</div><div class='metric-lbl'>Active Categories</div></div>", unsafe_allow_html=True)
+
+        st.markdown("<div style='margin-bottom: 18px;'></div>", unsafe_allow_html=True)
+
+        ingest_tab1, ingest_tab2, ingest_tab3 = st.tabs([
+            "📤 Upload Custom Catalog (CSV / JSON)",
+            "📦 Ingest from Sample Datasets",
+            "🔑 Gateway API Credentials & Live Diagnostics",
+        ])
 
     # ── TAB 4.1: Custom File Upload ──────────────────────────────────────────
     with ingest_tab1:
@@ -1788,10 +1888,15 @@ with tab_onboard:
                 if st.button("⚡ Ingest & Enrich Uploaded Products", key="btn_ingest_uploaded"):
                     with st.spinner("Parsing schema, enriching vernacular intent phrases & upserting to ChromaDB…"):
                         from src.catalog.importer import import_catalog_sync
-                        count = import_catalog_sync(saved_path, limit=custom_limit, verbose=False)
+                        count = import_catalog_sync(
+                            saved_path,
+                            limit=custom_limit,
+                            verbose=False,
+                            merchant_id=st.session_state.active_merchant_id,
+                        )
                         st.cache_data.clear()
                         vs.invalidate_cache()
-                        st.success(f"🎉 Successfully enriched and indexed {count} products into ChromaDB! Total Catalog Size: {vs.catalog_size()}")
+                        st.success(f"🎉 Successfully enriched and indexed {count} products for '{st.session_state.active_merchant_name}'! Total Catalog Size: {vs.catalog_size()}")
                         st.rerun()
             except Exception as exc:
                 st.error(f"Error parsing uploaded file: {exc}")
@@ -1820,10 +1925,15 @@ with tab_onboard:
                         if "BigBasket Real" in sample_choice
                         else "data/bigbasket_sample.csv"
                     )
-                    count = import_catalog_sync(target_file, limit=sample_limit, verbose=False)
+                    count = import_catalog_sync(
+                        target_file,
+                        limit=sample_limit,
+                        verbose=False,
+                        merchant_id=st.session_state.active_merchant_id,
+                    )
                     st.cache_data.clear()
                     vs.invalidate_cache()
-                    st.success(f"✓ Successfully indexed {count} products into ChromaDB! Total Catalog Size: {vs.catalog_size()}")
+                    st.success(f"✓ Successfully indexed {count} products for '{st.session_state.active_merchant_name}'! Total Catalog Size: {vs.catalog_size()}")
                     st.rerun()
 
         with onboard_c2:

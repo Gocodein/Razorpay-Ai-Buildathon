@@ -94,6 +94,7 @@ def upsert_products(enriched_products: list[dict[str, Any]]) -> None:
             "stock": int(p["stock"]),
             "sku": p["sku"],
             "category": p["category"],
+            "merchant_id": str(p.get("merchant_id") or settings.merchant_id),
             "agent_description": p["agent_description"],
             "structured_attributes": json.dumps(
                 p.get("structured_attributes", {}), ensure_ascii=False
