@@ -18,7 +18,9 @@ import warnings
 from pathlib import Path
 from typing import Any
 
-# Suppress Hugging Face unauthenticated rate-limit advisory notice
+# Enforce offline cache mode to prevent Hugging Face Hub network latency and rate limits
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
+os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 warnings.filterwarnings("ignore", message=".*unauthenticated requests to the HF Hub.*")
@@ -32,12 +34,19 @@ from src.config import settings
 
 # ── Embedding function (local sentence-transformers) ────────────────────────
 
-_EMBED_FN = embedding_functions.SentenceTransformerEmbeddingFunction(
-    model_name=settings.embedding_model
-)
-
+_EMBED_FN: Any = None
 _CACHED_CLIENT: chromadb.PersistentClient | None = None
 _CACHED_COLLECTION: chromadb.Collection | None = None
+
+
+def _get_embed_fn():
+    """Return the cached embedding function, lazy-loaded on first call to prevent import stalls."""
+    global _EMBED_FN
+    if _EMBED_FN is None:
+        _EMBED_FN = embedding_functions.SentenceTransformerEmbeddingFunction(
+            model_name=settings.embedding_model
+        )
+    return _EMBED_FN
 
 
 # ── ChromaDB client (persistent, stored on disk) ────────────────────────────
@@ -53,7 +62,7 @@ def _get_collection() -> chromadb.Collection:
         _CACHED_CLIENT = chromadb.PersistentClient(path=settings.chroma_db_path)
     _CACHED_COLLECTION = _CACHED_CLIENT.get_or_create_collection(
         name=settings.catalog_collection,
-        embedding_function=_EMBED_FN,
+        embedding_function=_get_embed_fn(),
         metadata={"hnsw:space": "cosine"},
     )
     return _CACHED_COLLECTION

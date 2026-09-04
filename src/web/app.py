@@ -845,14 +845,14 @@ Rules:
 7. Use the ₹ symbol for prices. Keep answers helpful and direct.
 """
 
-    candidate_models = [settings.gemini_model, "gemini-3.7-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite"]
+    candidate_models = ["gemini-3.5-flash", "gemini-3.1-flash-lite", settings.gemini_model]
     unique_models = [m for m in candidate_models if m]
 
     tool_calls_log = []
 
     try:
         headers = {"x-goog-api-key": settings.gemini_api_key}
-        with httpx.Client(timeout=20.0) as client:
+        with httpx.Client(timeout=10.0) as client:
             for _subturn in range(8):
                 payload = {
                     "system_instruction": {"parts": [{"text": system_text}]},
@@ -1997,7 +1997,7 @@ with tab_onboard:
                         try:
                             headers = {"x-goog-api-key": reloaded.gemini_api_key}
                             url = f"https://generativelanguage.googleapis.com/v1beta/models/{reloaded.gemini_model}:generateContent"
-                            with httpx.Client(timeout=6.0) as cl:
+                            with httpx.Client(timeout=12.0) as cl:
                                 r = cl.post(url, json={"contents": [{"parts": [{"text": "hi"}]}]}, headers=headers)
                                 if r.status_code == 200:
                                     gem_ok = True

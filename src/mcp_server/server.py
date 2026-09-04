@@ -78,7 +78,7 @@ class SearchInput(BaseModel):
             "'sunscreen under 500 rupees for oily skin' or "
             "'something for hair fall'."
         ),
-        min_length=2,
+        min_length=1,
         max_length=300,
     )
     max_results: int = Field(
@@ -97,9 +97,8 @@ class SearchInput(BaseModel):
         description="If true, only return products that have stock available.",
     )
     session_id: str = Field(
-        ...,
+        default="demo_session_001",
         description="Unique agent session token — used for audit trail and spend tracking.",
-        min_length=4,
     )
 
 
