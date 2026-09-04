@@ -318,11 +318,15 @@ st.markdown("""
 # ── Agent Tool Execution Registry ────────────────────────────────────────────
 
 def _search_products(query, max_results=5, max_price_inr=None, in_stock_only=True, session_id=""):
-    results = vs.search(query=query, n_results=max_results,
-                        max_price_inr=max_price_inr, in_stock_only=in_stock_only)
+    try:
+        results = vs.search(query=query, n_results=max_results,
+                            max_price_inr=max_price_inr, in_stock_only=in_stock_only)
+    except Exception as exc:
+        logger.error("Search execution error: %s", exc)
+        results = []
     audit.log_event(session_id=session_id, tool_name="catalog_search_products",
                     inputs={"query": query, "max_price_inr": max_price_inr},
-                    outcome="success", details={"count": len(results)})
+                    outcome="success" if results else "empty", details={"count": len(results)})
     return {"results": results, "count": len(results)}
 
 

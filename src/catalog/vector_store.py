@@ -13,10 +13,14 @@ Typical workflow:
 from __future__ import annotations
 
 import json
+import logging
 import os
+import re
 import warnings
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 # Enforce offline cache mode to prevent Hugging Face Hub network latency and rate limits
 os.environ.setdefault("HF_HUB_OFFLINE", "1")
@@ -76,7 +80,8 @@ _CACHED_COUNT: int | None = None
 
 def invalidate_cache() -> None:
     """Invalidate collection and product caches after upserts or inventory changes."""
-    global _CACHED_COLLECTION, _CACHED_PRODUCTS, _CACHED_COUNT
+    global _CACHED_CLIENT, _CACHED_COLLECTION, _CACHED_PRODUCTS, _CACHED_COUNT
+    _CACHED_CLIENT = None
     _CACHED_COLLECTION = None
     _CACHED_PRODUCTS = None
     _CACHED_COUNT = None
@@ -128,20 +133,77 @@ def upsert_products(enriched_products: list[dict[str, Any]]) -> None:
     print(f"[vector_store] Upserted {len(ids)} products into '{settings.catalog_collection}'.")
 
 
-# ── Search ───────────────────────────────────────────────────────────────────
+# ── Search & Resilient Fallback ─────────────────────────────────────────────
 
-def search(
+def _fallback_in_memory_search(
     query: str,
+    *,
     n_results: int = 5,
-    max_price_inr: int | None = None,
-    in_stock_only: bool = True,
+    max_price_inr: float | None = None,
+    in_stock_only: bool = False,
     merchant_id: str | None = None,
 ) -> list[dict[str, Any]]:
     """
-    Semantic search over the product catalog.
+    Robust zero-downtime fallback: Searches products in-memory using token matching
+    and metadata filtering if ChromaDB's vector index encounters internal drift.
+    """
+    all_prods = get_all_products(limit=500)
+    clean_q = (query or "").strip().lower()
+    query_tokens = [tok for tok in re.findall(r"\w+", clean_q) if len(tok) >= 2]
+
+    scored: list[tuple[float, dict[str, Any]]] = []
+    for prod in all_prods:
+        stock = int(prod.get("stock", 0))
+        if in_stock_only and stock <= 0:
+            continue
+        price = float(prod.get("price_inr", 0))
+        if max_price_inr is not None and price > max_price_inr:
+            continue
+        if merchant_id and prod.get("merchant_id") != merchant_id:
+            continue
+
+        name = str(prod.get("name", "")).lower()
+        category = str(prod.get("category", "")).lower()
+        search_text = str(prod.get("search_text", "")).lower()
+        desc = str(prod.get("agent_description", "")).lower()
+        combined = f"{name} {category} {search_text} {desc}"
+
+        score = 0.0
+        for tok in query_tokens:
+            if tok in name:
+                score += 4.0
+            elif tok in category:
+                score += 2.5
+            elif tok in combined:
+                score += 1.0
+
+        if clean_q and clean_q in combined:
+            score += 3.0
+
+        relevance = round(min(0.95, 0.50 + (score * 0.1)), 3)
+        prod_copy = dict(prod)
+        prod_copy["relevance_score"] = relevance
+        scored.append((score, prod_copy))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    if scored and scored[0][0] == 0:
+        return [p for _, p in scored[:n_results]]
+    return [p for s, p in scored if s > 0][:n_results]
+
+
+def search(
+    query: str,
+    *,
+    n_results: int = 5,
+    max_price_inr: float | None = None,
+    in_stock_only: bool = False,
+    merchant_id: str | None = None,
+) -> list[dict[str, Any]]:
+    """
+    Query the catalog with natural language; returns nearest neighbours.
 
     Args:
-        query:         Natural-language buyer query.
+        query:         Free-text buyer request (e.g. "matte sunscreen for oily skin").
         n_results:     Maximum number of results to return.
         max_price_inr: Optional price ceiling in INR.
         in_stock_only: If True, only return products with stock > 0.
@@ -182,10 +244,27 @@ def search(
     if where:
         query_kwargs["where"] = where
 
-    results = collection.query(**query_kwargs)
+    results = None
+    try:
+        results = collection.query(**query_kwargs)
+    except Exception as exc:
+        logger.warning("ChromaDB query encountered error '%s'. Re-initializing client...", exc)
+        invalidate_cache()
+        collection = _get_collection()
+        try:
+            results = collection.query(**query_kwargs)
+        except Exception as retry_exc:
+            logger.error("ChromaDB retry failed: %s. Using in-memory fallback search.", retry_exc)
+            return _fallback_in_memory_search(
+                query=clean_query,
+                n_results=n_results,
+                max_price_inr=max_price_inr,
+                in_stock_only=in_stock_only,
+                merchant_id=merchant_id,
+            )
 
     products: list[dict[str, Any]] = []
-    if results["metadatas"] and results["metadatas"][0]:
+    if results and results.get("metadatas") and results["metadatas"][0]:
         for i, meta in enumerate(results["metadatas"][0]):
             distance = results["distances"][0][i]
             relevance_score = round(1 - distance, 3)   # cosine: higher = more relevant
@@ -207,18 +286,25 @@ def get_by_id(product_id: str) -> dict[str, Any] | None:
 
     Returns None if the product does not exist in the catalog.
     """
-    collection = _get_collection()
-    result = collection.get(
-        ids=[product_id],
-        include=["metadatas", "documents"],
-    )
-    if not result["ids"]:
-        return None
+    try:
+        collection = _get_collection()
+        result = collection.get(
+            ids=[product_id],
+            include=["metadatas", "documents"],
+        )
+        if result and result.get("ids"):
+            meta = result["metadatas"][0]
+            product = _deserialise_meta(meta)
+            product["id"] = product_id
+            return product
+    except Exception as exc:
+        logger.warning("ChromaDB get_by_id error for '%s': %s", product_id, exc)
 
-    meta = result["metadatas"][0]
-    product = _deserialise_meta(meta)
-    product["id"] = product_id
-    return product
+    # Fallback to in-memory catalog
+    for prod in get_all_products(limit=500):
+        if prod.get("id") == product_id:
+            return dict(prod)
+    return None
 
 
 def catalog_size() -> int:
